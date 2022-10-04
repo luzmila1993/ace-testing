@@ -1,0 +1,2 @@
+variables:
+- group: build-api-apiname-001

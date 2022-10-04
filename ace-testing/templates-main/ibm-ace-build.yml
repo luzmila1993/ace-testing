@@ -1,0 +1,102 @@
+steps:
+ - checkout: self
+   displayName: 'Checkout Application Files'
+ - checkout: templates
+   displayName: 'Checkout Templates Files'    
+ - task: Docker@2
+   displayName: 'IBM Image Registry Login'
+   inputs:
+     containerRegistry: IBMregistry
+     command: login
+ - task: CopyFiles@2
+   displayName: 'Copy Dockerfile to working directory'
+   inputs:
+     SourceFolder: '$(System.DefaultWorkingDirectory)/templates/supportfiles/'
+     Contents: 'Dockerfile'
+     TargetFolder: '$(System.DefaultWorkingDirectory)/$(appName)/'
+ - task: CopyFiles@2
+   displayName: 'Copy Supportfiles to working directory'
+   inputs:
+     SourceFolder: '$(System.DefaultWorkingDirectory)/templates/supportfiles/'
+     Contents: '**'
+     TargetFolder: '$(System.DefaultWorkingDirectory)/'
+ - task: replacetokens@5
+   displayName: 'Replace ACE server'
+   inputs:
+    rootDirectory: '$(System.DefaultWorkingDirectory)/$(appName)/'
+    targetFiles: 'Dockerfile'
+    encoding: 'auto'
+    tokenPattern: 'default'
+    writeBOM: true
+    actionOnMissing: 'warn'
+    keepToken: false
+    actionOnNoFiles: 'continue'
+    enableTransforms: false
+    enableRecursion: false
+    useLegacyPattern: false
+    enableTelemetry: true
+    variableFiles: 'aceServer'
+    defaultValue:  $(aceImage)  
+ - task: Docker@2
+   displayName: Build the application Docker Image
+   inputs:
+    Dockerfile: $(System.DefaultWorkingDirectory)/$(appName)/Dockerfile
+    command: build
+    arguments: '--build-arg PROJECT_FOLDER=$(projectName) --build-arg PROJECT_TEST_FOLDER=$(testProject) --build-arg BAR_NAME=$(barName) --build-arg TEST_BAR_NAME=$(testBar) --build-arg APP_REPO=$(appName) --build-arg AGENT=$(System.DefaultWorkingDirectory)'
+    repository: 'bar-images'
+    tags: $(Build.BuildId)
+ - task: CmdLine@2
+   displayName: 'Create docker container'
+   inputs:
+    script: 'docker create --rm --name bar-images cp.icr.io/bar-images:$(Build.BuildId)'
+ - task: Docker@2
+   displayName: 'Run the application docker image'
+   inputs:
+     command: start
+     container: 'bar-images'
+ - task: CmdLine@2
+   displayName: 'Extract the BAR File to Working Directory'
+   inputs:
+    script: 'docker cp bar-images:/home/aceuser/$(barName).bar $(System.DefaultWorkingDirectory)'
+ - task: CmdLine@2
+   displayName: 'Extract the test results to working directory'
+   inputs:
+    script: 'docker cp bar-images:/home/aceuser/TEST-1.xml $(System.DefaultWorkingDirectory)'
+ - task: Docker@2
+   displayName: 'Stop the tests container'
+   inputs:
+     command: stop
+     container: 'bar-images'
+ - task: Bash@3
+   displayName: 'Format the test result in azure way'
+   inputs:
+     targetType: filePath
+     filePath: ./testresultformatting.sh
+     arguments: 'TEST-1.xml test-output.xml'
+ - task: PublishTestResults@2
+   displayName: 'Publish Test Results to Azure'
+   inputs:
+     testResultsFiles: 'test-output.xml'
+     failTaskOnFailedTests: true
+ - task: JFrog.jfrog-artifactory-vsts-extension.artifactory-generic-upload.ArtifactoryGenericUpload@2
+   displayName: 'Artifactory BAR file Upload'
+   inputs:
+     artifactoryService: CustomArtifactory
+     fileSpec: |
+      {
+        "files": [
+          {
+            "pattern": "$(barName).bar",
+            "target": "/${org}-generic-local/$(appName)/${buildid}/$(appName)-${buildid}.bar",
+            "targetProps": "ace.version=${aceversion}"
+          }
+        ]
+      }
+     replaceSpecVars: true
+     specVars: 'buildid=$BUILD_BUILDID;aceversion=$(aceVersion);org=$(orgName)'
+     collectBuildInfo: true
+     includeEnvVars: true
+ - task: JFrog.jfrog-artifactory-vsts-extension.artifactory-publish-build-info.ArtifactoryPublishBuildInfo@1
+   displayName: 'Artifactory Publish Build Info'
+   inputs:
+     artifactoryService: CustomArtifactory

@@ -1,0 +1,23 @@
+resources:
+  repositories:
+    - repository: templates
+      endpoint: <endpoint>
+      type: bitbucket
+      name: <organizacion>/<repositorio>
+      trigger: none
+
+trigger:
+- main
+
+variables:
+- template: variables.yml
+
+pool:
+  name: <poolName>
+
+jobs:
+- job: Build
+  workspace:
+    clean: all
+  steps:
+  - template: ibm-ace-build.yml@templates
