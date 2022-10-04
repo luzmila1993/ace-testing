@@ -20,7 +20,7 @@ CREATE COMPUTE MODULE api1_Compute
 
 	CREATE PROCEDURE CopyEntireMessage() BEGIN
 		SET OutputRoot = InputRoot;
-		SET OutputRoot.JSON.Data.server = 'API 1';
+		SET OutputRoot.JSON.Data.server = 'API Luzmila';
 		SET OutputRoot.JSON.Data.result = InputRoot.JSON.Data.A - InputRoot.JSON.Data.B + InputRoot.JSON.Data.constant;
 	END;
 END MODULE;
